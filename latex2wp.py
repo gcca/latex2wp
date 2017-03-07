@@ -6,10 +6,12 @@ import argparse
 
 # Style
 
-PARAGRAPH_STYLE = 'text-align: justify'
-MATHENV_STYLE = ('text-align: jusfity;'
+PARAGRAPH_STYLE = ('text-align: justify;'
+                   'text-indent: 2em;')
+MATHENV_STYLE = ('text-align: justify;'
                  'color: rgb(84, 84, 84);'
-                 'font-family: Verdana,Helvetica,Arial,sans-serif;')
+                 'font-family: Verdana,Helvetica,Arial,sans-serif;'
+                 'padding: 0')
 
 
 # Parser
@@ -27,6 +29,7 @@ def latex2wp():
 
     source = from_file(args.input_path)
     source = document(source)
+    source = split_inline(source)
     blocks = split_blocks(source)
     fragments = process(blocks)
 
@@ -46,6 +49,17 @@ def document(source):
 
 def split_blocks(source):
     return source.split('\n\n')
+
+def split_inline(source):
+    source = re.sub('\\\\textsuperscript{(.)}','<sup>\\1</sup>', source)
+    source = re.sub('\\\\href{(.*)}{(.*)}', '<a href="\\1">\\2</a>', source)
+    source = re.sub('\\\\emph{(.*?)}', '<em>\\1</em>', source)
+    return (source
+        .replace('---','&mdash;')
+        .replace('--','&ndash;')
+        .replace('\\...','&hellip;')
+        .replace('<<','&laquo;')
+        .replace('>>','&raquo;'))
 
 
 def process(blocks):
@@ -78,8 +92,7 @@ def math_block_processor(block):
 
 
 def math_inline_processor(block):
-    return re.sub(r'\$(.*?)\$', r'$latex {\1}&fg=000000&bg=ffffff$',
-                  block, re.S)
+    return re.sub(r'\$(.*?)\$', r'$latex {\1}&fg=000000&bg=ffffff$', block)
 
 
 def command_processor(block):
@@ -89,12 +102,21 @@ def command_processor(block):
     if command in ('array', 'aligned'):
         return block
     description = match.group(3)
-    content = match.group(4)
+    content = match.group(4).strip()
 
     if 'lstlisting' == command:
         return lstlisting_environ(command, description, content)
+    elif 'proof' == command:
+        return proof_environ(content)
     else:
         return math_environ(command, description, content)
+
+
+def proof_environ(content):
+    return ('<div style="text-align: justify">'
+            '<em>Demostración.</em> %s'
+            '<span style="float:right">$latex \\Box&s=-4&bg=000000$</span>'
+            '</div>') % content
 
 
 def lstlisting_environ(command, description, content):
@@ -118,7 +140,7 @@ def math_environ(command, description, content):
     }
     math_environ.counter += 1
     content = label_command(content, str(math_environ.counter))
-    return ('<blockquote style="%s"><b>%s %d%s.</b> %s</blockquote>'
+    return ('<div style="%s"><b>%s %d</b>%s. %s</div>'
             % (MATHENV_STYLE,
                caption[command],
                math_environ.counter,
